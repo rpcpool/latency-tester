@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"flag"
 	"io"
 	"log"
 	"sync"
@@ -16,25 +17,39 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+var (
+	wsAddr   = flag.String("ws", "", "Solana Websocket Address")
+	grpcAddr = flag.String("grpc", "", "Solana gRPC address")
+	account  = flag.String("account", "", "Account to subscribe to")
+)
+
 func main() {
+	log.SetFlags(0)
+	flag.Parse()
+
 	var wg sync.WaitGroup
 
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		grpc_client()
+		if *grpcAddr != "" {
+			grpc_client()
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		websocket_client()
+
+		if *wsAddr != "" {
+			websocket_client()
+		}
 	}()
 
 	wg.Wait()
 }
 
 func grpc_client() {
-	conn, err := grpc.Dial("sfo3.rpcpool.wg:80", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(*grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		panic(err)
 	}
@@ -44,7 +59,7 @@ func grpc_client() {
 
 	subr2 := pb.SubscribeRequest{}
 	subr2.Accounts = make(map[string]*pb.SubscribeRequestFilterAccounts)
-	subr2.Accounts["usdc"] = &pb.SubscribeRequestFilterAccounts{Account: []string{"9wFFyRfZBsuAha4YcuxcXLKwMxJR43S7fPfQLusDBzvT"}}
+	subr2.Accounts["usdc"] = &pb.SubscribeRequestFilterAccounts{Account: []string{*account}}
 
 	stream, err := client.Subscribe(context.Background(), &subr2)
 	if err != nil {
@@ -67,11 +82,11 @@ func grpc_client() {
 }
 
 func websocket_client() {
-	client, err := ws.Connect(context.Background(), "ws://sfo3.rpcpool.wg")
+	client, err := ws.Connect(context.Background(), *wsAddr)
 	if err != nil {
 		panic(err)
 	}
-	program := solana.MustPublicKeyFromBase58("9wFFyRfZBsuAha4YcuxcXLKwMxJR43S7fPfQLusDBzvT") // serum
+	program := solana.MustPublicKeyFromBase58(*account) 
 
 	sub, err := client.AccountSubscribeWithOpts(
 		program,
