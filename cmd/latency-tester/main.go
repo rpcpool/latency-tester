@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
@@ -18,9 +19,13 @@ import (
 )
 
 var (
-	wsAddr   = flag.String("ws", "", "Solana Websocket Address")
-	grpcAddr = flag.String("grpc", "", "Solana gRPC address")
-	account  = flag.String("account", "", "Account to subscribe to")
+	wsAddr      = flag.String("ws", "", "Solana Websocket Address")
+	grpcAddr    = flag.String("grpc", "", "Solana gRPC address")
+	account     = flag.String("account", "", "Account to subscribe to")
+	accountData = flag.Bool("account-data", true, "Include data")
+
+	ws_slot   map[uint64]uint = make(map[uint64]uint)
+	grpc_slot map[uint64]uint = make(map[uint64]uint)
 )
 
 func main() {
@@ -67,6 +72,7 @@ func grpc_client() {
 	}
 	for {
 		resp, err := stream.Recv()
+		timestamp := time.Now().UnixNano()
 
 		if err == io.EOF {
 			return
@@ -77,16 +83,23 @@ func grpc_client() {
 
 		account := resp.GetAccount()
 
-		log.Printf("[GRPC] %d: %s", account.Slot, base64.StdEncoding.EncodeToString(account.Account.Data))
+		grpc_slot[account.Slot]++
+
+		if *accountData {
+			log.Printf("[GRPC] %d{%d}: %s @ %d", account.Slot, grpc_slot[account.Slot], base64.StdEncoding.EncodeToString(account.Account.Data), timestamp)
+		} else {
+			log.Printf("[GRPC] %d{%d} @ %d", account.Slot, grpc_slot[account.Slot], timestamp)
+		}
 	}
 }
 
 func websocket_client() {
 	client, err := ws.Connect(context.Background(), *wsAddr)
+
 	if err != nil {
 		panic(err)
 	}
-	program := solana.MustPublicKeyFromBase58(*account) 
+	program := solana.MustPublicKeyFromBase58(*account)
 
 	sub, err := client.AccountSubscribeWithOpts(
 		program,
@@ -101,10 +114,17 @@ func websocket_client() {
 
 	for {
 		got, err := sub.Recv()
+		timestamp := time.Now().UnixNano()
 		if err != nil {
 			panic(err)
 		}
 
-		log.Printf("[WebS] %d: %s", got.Context.Slot, base64.StdEncoding.EncodeToString(got.Value.Data.GetBinary()))
+		ws_slot[got.Context.Slot]++
+
+		if *accountData {
+			log.Printf("[WS  ] %d{%d}: %s @ %d", got.Context.Slot, ws_slot[got.Context.Slot], base64.StdEncoding.EncodeToString(got.Value.Data.GetBinary()), timestamp)
+		} else {
+			log.Printf("[WS  ] %d{%d} @ %d", got.Context.Slot, ws_slot[got.Context.Slot], timestamp)
+		}
 	}
 }
