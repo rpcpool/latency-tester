@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/md5"
 	"encoding/base64"
 	"flag"
 	"io"
@@ -35,18 +36,18 @@ func main() {
 	var wg sync.WaitGroup
 
 	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		if *grpcAddr != "" {
-			grpc_client()
-		}
-	}()
 
 	go func() {
 		defer wg.Done()
 
 		if *wsAddr != "" {
 			websocket_client()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if *grpcAddr != "" {
+			grpc_client()
 		}
 	}()
 
@@ -88,7 +89,7 @@ func grpc_client() {
 		if *accountData {
 			log.Printf("[GRPC] %d{%d}: %s @ %d", account.Slot, grpc_slot[account.Slot], base64.StdEncoding.EncodeToString(account.Account.Data), timestamp)
 		} else {
-			log.Printf("[GRPC] %d{%d} @ %d", account.Slot, grpc_slot[account.Slot], timestamp)
+			log.Printf("[GRPC] %d{%d}: %x @ %d", account.Slot, grpc_slot[account.Slot], md5.Sum(account.Account.Data), timestamp)
 		}
 	}
 }
@@ -124,7 +125,7 @@ func websocket_client() {
 		if *accountData {
 			log.Printf("[WS  ] %d{%d}: %s @ %d", got.Context.Slot, ws_slot[got.Context.Slot], base64.StdEncoding.EncodeToString(got.Value.Data.GetBinary()), timestamp)
 		} else {
-			log.Printf("[WS  ] %d{%d} @ %d", got.Context.Slot, ws_slot[got.Context.Slot], timestamp)
+			log.Printf("[WS  ] %d{%d} %x @ %d", got.Context.Slot, ws_slot[got.Context.Slot], md5.Sum(got.Value.Data.GetBinary()), timestamp)
 		}
 	}
 }
