@@ -16,6 +16,7 @@ import (
 
 	pb "github.com/rpcpool/latency-tester/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -23,6 +24,7 @@ var (
 	wsAddr      = flag.String("ws", "", "Solana Websocket Address")
 	grpcAddr    = flag.String("grpc", "", "Solana gRPC address")
 	account     = flag.String("account", "", "Account to subscribe to")
+	token       = flag.String("token", "", "set token")
 	accountData = flag.Bool("account-data", true, "Include data")
 
 	ws_slot   map[uint64]uint = make(map[uint64]uint)
@@ -55,6 +57,7 @@ func main() {
 }
 
 func grpc_client() {
+  log.Println("Starting grpc client")
 	conn, err := grpc.Dial(*grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		panic(err)
@@ -65,9 +68,15 @@ func grpc_client() {
 
 	subr2 := pb.SubscribeRequest{}
 	subr2.Accounts = make(map[string]*pb.SubscribeRequestFilterAccounts)
-	subr2.Accounts["usdc"] = &pb.SubscribeRequestFilterAccounts{Account: []string{*account}}
+	subr2.Accounts["latencytest"] = &pb.SubscribeRequestFilterAccounts{Account: []string{*account}}
 
-	stream, err := client.Subscribe(context.Background(), &subr2)
+  ctx := context.Background()
+  if *token != "" {
+    md := metadata.New(map[string]string{"x-token": *token})
+    ctx = metadata.NewOutgoingContext(ctx, md)
+  }
+
+	stream, err := client.Subscribe(ctx, &subr2)
 	if err != nil {
 		panic(err)
 	}
@@ -125,7 +134,7 @@ func websocket_client() {
 		if *accountData {
 			log.Printf("[WS  ] %d{%d}: %s @ %d", got.Context.Slot, ws_slot[got.Context.Slot], base64.StdEncoding.EncodeToString(got.Value.Data.GetBinary()), timestamp)
 		} else {
-			log.Printf("[WS  ] %d{%d} %x @ %d", got.Context.Slot, ws_slot[got.Context.Slot], md5.Sum(got.Value.Data.GetBinary()), timestamp)
+			log.Printf("[WS  ] %d{%d}: %x @ %d", got.Context.Slot, ws_slot[got.Context.Slot], md5.Sum(got.Value.Data.GetBinary()), timestamp)
 		}
 	}
 }
